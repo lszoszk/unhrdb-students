@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your First Database [educational material]</title>
+    <meta name="robots" content="noindex, nofollow">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f0f4f8;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 40px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+        
+        header p {
+            font-size: 0.9rem;
+            opacity: 0.9;
+            margin-top: 5px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 10px;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-size: 1rem;
+            color: #64748b;
+            border-radius: 8px 8px 0 0;
+            transition: all 0.2s;
+        }
+        
+        .tab:hover {
+            background-color: #f1f5f9;
+            color: #475569;
+        }
+        
+        .tab.active {
+            background-color: #667eea;
+            color: white;
+        }
+        
+        .tab-content {
+            display: none;
+            background: white;
+            border-radius: 0 8px 8px 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            min-height: 400px;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        /* Search tab styles */
+        .search-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .search-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .search-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.2s;
+        }
+        
+        .search-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .search-btn {
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background 0.2s;
+        }
+        
+        .search-btn:hover {
+            background: #5a6fd6;
+        }
+        
+        .filter-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .filter-select {
+            padding: 8px 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            background: white;
+        }
+        
+        .results-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .result-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 16px;
+            background: #fafafa;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .result-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+        
+        .result-title {
+            font-weight: 600;
+            color: #475569;
+            font-size: 1.1rem;
+        }
+        
+        .result-symbol {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            background: #f1f5f9;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        
+        .result-meta {
+            display: flex;
+            gap: 15px;
+            font-size: 0.85rem;
+            color: #64748b;
+            margin-bottom: 10px;
+        }
+        
+        .result-text {
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        .result-text .highlight {
+            background-color: #fef08a;
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
+        
+        .result-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .action-btn {
+            padding: 6px 12px;
+            border: 1px solid #e2e8f0;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+        
+        .action-btn:hover {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+        }
+        
+        .no-results {
+            text-align: center;
+            padding: 40px;
+            color: #64748b;
+        }
+        
+        /* Documents tab styles */
+        .documents-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+        }
+        
+        .document-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 16px;
+            background: white;
+            transition: all 0.2s;
+        }
+        
+        .document-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .document-title {
+            font-weight: 600;
+            color: #475569;
+            margin-bottom: 8px;
+            font-size: 1rem;
+        }
+        
+        .document-meta {
+            font-size: 0.85rem;
+            color: #64748b;
+            margin-bottom: 10px;
+        }
+        
+        .document-symbol {
+            font-family: monospace;
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: #475569;
+        }
+        
+        .document-stats {
+            display: flex;
+            gap: 10px;
+            font-size: 0.8rem;
+            color: #94a3b8;
+            margin-top: 10px;
+        }
+        
+        .document-actions {
+            margin-top: 12px;
+        }
+        
+        .view-btn {
+            width: 100%;
+            padding: 8px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        
+        .view-btn:hover {
+            background: #5a6fd6;
+        }
+        
+        /* Workspace tab styles */
+        .workspace-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .workspace-section {
+            margin-bottom: 30px;
+        }
+        
+        .workspace-section h2 {
+            color: #475569;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+        }
+        
+        .notes-list, .bookmarks-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .note-card, .bookmark-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 12px;
+            background: #fafafa;
+        }
+        
+        .note-header, .bookmark-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.85rem;
+            color: #64748b;
+        }
+        
+        .note-text, .bookmark-text {
+            color: #333;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #94a3b8;
+        }
+        
+        .empty-state p {
+            margin-top: 10px;
+        }
+        
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal.active {
+            display: flex;
+        }
+        
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 700px;
+            max-height: 80vh;
+            overflow-y: auto;
+            width: 90%;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .modal-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #475569;
+        }
+        
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #64748b;
+        }
+        
+        .modal-body {
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        .modal-footer {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        
+        .close-modal-btn {
+            padding: 8px 16px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #64748b;
+        }
+        
+        .loading::after {
+            content: '...';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+        
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60% { content: '...'; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Your First Database [educational material]</h1>
+        <p>Explore UN General Comments - Educational Version</p>
+    </header>
+    
+    <div class="container">
+        <div class="tabs">
+            <button class="tab active" data-tab="search">Search</button>
+            <button class="tab" data-tab="documents">Documents</button>
+            <button class="tab" data-tab="workspace">Workspace</button>
+        </div>
+        
+        <div id="search" class="tab-content active">
+            <div class="search-container">
+                <div class="search-box">
+                    <input type="text" id="searchInput" class="search-input" placeholder="Search paragraphs...">
+                    <button id="searchBtn" class="search-btn">Search</button>
+                </div>
+                <div class="filter-container">
+                    <select id="committeeFilter" class="filter-select">
+                        <option value="">All Committees</option>
+                    </select>
+                    <select id="yearFilter" class="filter-select">
+                        <option value="">All Years</option>
+                    </select>
+                </div>
+                <div id="searchResults" class="results-container"></div>
+            </div>
+        </div>
+        
+        <div id="documents" class="tab-content">
+            <div class="documents-grid" id="documentsGrid"></div>
+        </div>
+        
+        <div id="workspace" class="tab-content">
+            <div class="workspace-container">
+                <div class="workspace-section">
+                    <h2>My Notes</h2>
+                    <div id="notesList" class="notes-list"></div>
+                </div>
+                <div class="workspace-section">
+                    <h2>My Bookmarks</h2>
+                    <div id="bookmarksList" class="bookmarks-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="documentModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title" id="modalTitle"></div>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+            <div class="modal-footer">
+                <button class="close-modal-btn" onclick="closeModal()">Close</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Data
+        let documents = [];
+        let paragraphs = [];
+        let notes = [];
+        let bookmarks = [];
+        
+        // Load data
+        async function loadData() {
+            try {
+                const response = await fetch('data/general_comments.json');
+                paragraphs = await response.json();
+                
+                // Extract unique documents
+                const docMap = new Map();
+                paragraphs.forEach(p => {
+                    if (!docMap.has(p.document_id)) {
+                        docMap.set(p.document_id, {
+                            document_id: p.document_id,
+                            document_title: p.document_title,
+                            document_title_short: p.document_title_short,
+                            ohchr_symbol: p.ohchr_symbol,
+                            adoption_date: p.adoption_date,
+                            adoption_year: p.adoption_year,
+                            committee: p.committee,
+                            paragraph_count: 0
+                        });
+                    }
+                    docMap.get(p.document_id).paragraph_count++;
+                });
+                documents = Array.from(docMap.values()).sort((a, b) => b.adoption_year - a.adoption_year);
+                
+                // Populate filters
+                populateFilters();
+                
+                // Render documents
+                renderDocuments();
+                
+                console.log(`Loaded ${paragraphs.length} paragraphs from ${documents.length} documents`);
+            } catch (error) {
+                console.error('Error loading data:', error);
+                document.getElementById('documentsGrid').innerHTML = '<p class="no-results">Error loading data. Please refresh the page.</p>';
+            }
+        }
+        
+        function populateFilters() {
+            const committees = [...new Set(paragraphs.map(p => p.committee).filter(Boolean))];
+            const years = [...new Set(paragraphs.map(p => p.adoption_year).filter(Boolean))].sort((a, b) => b - a);
+            
+            const committeeSelect = document.getElementById('committeeFilter');
+            committees.forEach(c => {
+                const option = document.createElement('option');
+                option.value = c;
+                option.textContent = c;
+                committeeSelect.appendChild(option);
+            });
+            
+            const yearSelect = document.getElementById('yearFilter');
+            years.forEach(y => {
+                const option = document.createElement('option');
+                option.value = y;
+                option.textContent = y;
+                yearSelect.appendChild(option);
+            });
+        }
+        
+        // Search functionality
+        function search() {
+            const query = document.getElementById('searchInput').value.trim().toLowerCase();
+            const committee = document.getElementById('committeeFilter').value;
+            const year = document.getElementById('yearFilter').value;
+            
+            if (!query) {
+                document.getElementById('searchResults').innerHTML = '<div class="no-results">Enter a search term to find paragraphs</div>';
+                return;
+            }
+            
+            let results = paragraphs.filter(p => {
+                const matchesQuery = p.text.toLowerCase().includes(query);
+                const matchesCommittee = !committee || p.committee === committee;
+                const matchesYear = !year || p.adoption_year == year;
+                return matchesQuery && matchesCommittee && matchesYear;
+            });
+            
+            renderSearchResults(results, query);
+        }
+        
+        function renderSearchResults(results, query) {
+            const container = document.getElementById('searchResults');
+            
+            if (results.length === 0) {
+                container.innerHTML = '<div class="no-results">No results found</div>';
+                return;
+            }
+            
+            const queryWords = query.split(/\s+/).filter(w => w.length > 0);
+            
+            container.innerHTML = results.map(p => {
+                // Highlight matching words
+                let text = p.text;
+                queryWords.forEach(word => {
+                    const regex = new RegExp(`(${word})`, 'gi');
+                    text = text.replace(regex, '<span class="highlight">$1</span>');
+                });
+                
+                return `
+                    <div class="result-card">
+                        <div class="result-header">
+                            <div class="result-title">${p.document_title}</div>
+                            <div class="result-symbol">${p.ohchr_symbol}</div>
+                        </div>
+                        <div class="result-meta">
+                            <span>${p.committee}</span>
+                            <span>${p.adoption_date}</span>
+                            <span>Para. ${p.paragraph_number}</span>
+                        </div>
+                        <div class="result-text">${text}</div>
+                        <div class="result-actions">
+                            <button class="action-btn" onclick="viewDocument('${p.document_id}')">View Document</button>
+                            <button class="action-btn" onclick="addNote('${p.paragraph_id}', '${escapeHtml(p.text.substring(0, 100))}')">Add Note</button>
+                            <button class="action-btn" onclick="addBookmark('${p.paragraph_id}', '${escapeHtml(p.text.substring(0, 100))}')">Bookmark</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // Documents functionality
+        function renderDocuments() {
+            const container = document.getElementById('documentsGrid');
+            container.innerHTML = documents.map(d => `
+                <div class="document-card">
+                    <div class="document-title">${d.document_title}</div>
+                    <div class="document-meta">
+                        <span class="document-symbol">${d.ohchr_symbol}</span>
+                        <span>${d.committee}</span>
+                        <span>${d.adoption_year}</span>
+                    </div>
+                    <div class="document-stats">
+                        <span>${d.paragraph_count} paragraphs</span>
+                    </div>
+                    <div class="document-actions">
+                        <button class="view-btn" onclick="viewDocument('${d.document_id}')">View Document</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        // View document
+        function viewDocument(documentId) {
+            const doc = documents.find(d => d.document_id === documentId);
+            if (!doc) return;
+            
+            const docParagraphs = paragraphs.filter(p => p.document_id === documentId);
+            const content = docParagraphs.map(p => `
+                <div style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #e2e8f0;">
+                    <div style="font-weight: 600; margin-bottom: 4px;">Para. ${p.paragraph_number}</div>
+                    <div>${p.text}</div>
+                </div>
+            `).join('');
+            
+            document.getElementById('modalTitle').textContent = `${doc.document_title} (${doc.ohchr_symbol})`;
+            document.getElementById('modalBody').innerHTML = content;
+            document.getElementById('documentModal').classList.add('active');
+        }
+        
+        function closeModal() {
+            document.getElementById('documentModal').classList.remove('active');
+        }
+        
+        // Workspace functionality
+        function addNote(paragraphId, text) {
+            const note = prompt('Enter your note:', '');
+            if (note) {
+                const noteObj = {
+                    id: Date.now(),
+                    paragraphId,
+                    text: note,
+                    originalText: text,
+                    createdAt: new Date().toISOString()
+                };
+                notes.push(noteObj);
+                saveWorkspace();
+                renderWorkspace();
+            }
+        }
+        
+        function addBookmark(paragraphId, text) {
+            const bookmarkObj = {
+                id: Date.now(),
+                paragraphId,
+                text: text,
+                createdAt: new Date().toISOString()
+            };
+            bookmarks.push(bookmarkObj);
+            saveWorkspace();
+            renderWorkspace();
+        }
+        
+        function renderWorkspace() {
+            document.getElementById('notesList').innerHTML = notes.length > 0 ? notes.map(n => `
+                <div class="note-card">
+                    <div class="note-header">
+                        <span>${n.originalText.substring(0, 80)}...</span>
+                        <span>${new Date(n.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    <div class="note-text">${n.text}</div>
+                </div>
+            `).join('') : '<div class="empty-state"><p>No notes yet. Add notes from search results.</p></div>';
+            
+            document.getElementById('bookmarksList').innerHTML = bookmarks.length > 0 ? bookmarks.map(b => `
+                <div class="bookmark-card">
+                    <div class="bookmark-header">
+                        <span>${b.text.substring(0, 80)}...</span>
+                        <span>${new Date(b.createdAt).toLocaleDateString()}</span>
+                    </div>
+                </div>
+            `).join('') : '<div class="empty-state"><p>No bookmarks yet. Add bookmarks from search results.</p></div>';
+        }
+        
+        function saveWorkspace() {
+            localStorage.setItem('unhrdb_notes', JSON.stringify(notes));
+            localStorage.setItem('unhrdb_bookmarks', JSON.stringify(bookmarks));
+        }
+        
+        function loadWorkspace() {
+            const savedNotes = localStorage.getItem('unhrdb_notes');
+            const savedBookmarks = localStorage.getItem('unhrdb_bookmarks');
+            if (savedNotes) notes = JSON.parse(savedNotes);
+            if (savedBookmarks) bookmarks = JSON.parse(savedBookmarks);
+        }
+        
+        // Utility functions
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                
+                tab.classList.add('active');
+                document.getElementById(tab.dataset.tab).classList.add('active');
+            });
+        });
+        
+        // Event listeners
+        document.getElementById('searchBtn').addEventListener('click', search);
+        document.getElementById('searchInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') search();
+        });
+        
+        // Initialize
+        window.addEventListener('DOMContentLoaded', () => {
+            loadWorkspace();
+            loadData();
+            renderWorkspace();
+        });
+    </script>
+</body>
+</html>
