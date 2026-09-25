@@ -164,6 +164,7 @@
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
+            gap: 10px;
             margin-bottom: 10px;
         }
         
@@ -183,6 +184,8 @@
         
         .result-meta {
             display: flex;
+            flex-wrap: wrap;
+            align-items: center;
             gap: 15px;
             font-size: 0.85rem;
             color: #64748b;
@@ -196,12 +199,13 @@
         
         .result-text .highlight {
             background-color: #fef08a;
-            padding: 2px 4px;
+            padding: 2px 0;
             border-radius: 2px;
         }
         
         .result-actions {
             display: flex;
+            flex-wrap: wrap;
             gap: 10px;
             margin-top: 10px;
         }
@@ -219,6 +223,47 @@
         .action-btn:hover {
             background: #f8fafc;
             border-color: #cbd5e1;
+        }
+        
+        a.action-btn {
+            color: inherit;
+            text-decoration: none;
+        }
+        
+        .action-btn.is-active {
+            background: #eef2ff;
+            border-color: #667eea;
+            color: #4c51bf;
+        }
+        
+        .results-count {
+            font-size: 0.9rem;
+            color: #64748b;
+        }
+        
+        .show-more {
+            align-self: center;
+        }
+        
+        .status-badge {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            padding: 2px 8px;
+            border-radius: 4px;
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+        
+        .status-warning {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+            padding: 10px 14px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
         }
         
         .no-results {
@@ -335,6 +380,27 @@
             color: #333;
             font-size: 0.95rem;
             line-height: 1.5;
+        }
+        
+        .citation {
+            font-weight: 600;
+            color: #475569;
+        }
+        
+        .excerpt {
+            color: #64748b;
+            font-size: 0.85rem;
+            margin-bottom: 8px;
+        }
+        
+        .workspace-toolbar {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 20px;
+        }
+        
+        .para-focus {
+            background: #fef9c3;
         }
         
         .empty-state {
@@ -468,18 +534,21 @@
         </div>
         
         <div id="documents" class="tab-content">
-            <div class="documents-grid" id="documentsGrid"></div>
+            <div class="documents-grid" id="documentsGrid"><div class="loading">Loading documents</div></div>
         </div>
         
         <div id="workspace" class="tab-content">
             <div class="workspace-container">
+                <div class="workspace-toolbar">
+                    <button class="action-btn" data-action="export">Export notes &amp; bookmarks (Markdown)</button>
+                </div>
                 <div class="workspace-section">
                     <h2>My Notes</h2>
-                    <div id="notesList" class="notes-list"></div>
+                    <div id="notesList" class="notes-list"><div class="loading">Loading</div></div>
                 </div>
                 <div class="workspace-section">
                     <h2>My Bookmarks</h2>
-                    <div id="bookmarksList" class="bookmarks-list"></div>
+                    <div id="bookmarksList" class="bookmarks-list"><div class="loading">Loading</div></div>
                 </div>
             </div>
         </div>
@@ -502,14 +571,23 @@
         // Data
         let documents = [];
         let paragraphs = [];
+        let paragraphById = new Map();
+        let dataLoaded = false;
         let notes = [];
         let bookmarks = [];
+        
+        // Search state
+        const PAGE_SIZE = 20;
+        let currentResults = [];
+        let currentHighlight = null;
+        let shownCount = 0;
         
         // Load data
         async function loadData() {
             try {
                 const response = await fetch('data/general_comments.json');
                 paragraphs = await response.json();
+                paragraphById = new Map(paragraphs.map(p => [p.paragraph_id, p]));
                 
                 // Extract unique documents
                 const docMap = new Map();
@@ -519,7 +597,9 @@
                             document_id: p.document_id,
                             document_title: p.document_title,
                             document_title_short: p.document_title_short,
-                            ohchr_symbol: p.ohchr_symbol,
+                            signature: p.signature,
+                            source_url: p.source_url,
+                            status: p.status,
                             adoption_date: p.adoption_date,
                             adoption_year: p.adoption_year,
                             committee: p.committee,
@@ -529,17 +609,25 @@
                     docMap.get(p.document_id).paragraph_count++;
                 });
                 documents = Array.from(docMap.values()).sort((a, b) => b.adoption_year - a.adoption_year);
+                dataLoaded = true;
                 
                 // Populate filters
                 populateFilters();
                 
                 // Render documents
                 renderDocuments();
+                renderWorkspace();
+                
+                // Run a search the user started while the data was loading
+                if (document.getElementById('searchInput').value.trim()) search();
                 
                 console.log(`Loaded ${paragraphs.length} paragraphs from ${documents.length} documents`);
             } catch (error) {
                 console.error('Error loading data:', error);
-                document.getElementById('documentsGrid').innerHTML = '<p class="no-results">Error loading data. Please refresh the page.</p>';
+                document.querySelectorAll('.loading').forEach(el => {
+                    el.className = 'no-results';
+                    el.textContent = 'Error loading data. Please refresh the page.';
+                });
             }
         }
         
@@ -565,64 +653,142 @@
         }
         
         // Search functionality
+        
+        // Split the query into terms. Text in "double quotes" stays together as one phrase.
+        function parseQuery(query) {
+            const terms = [];
+            for (const match of query.matchAll(/["“”]([^"“”]+)["“”]|[^\s"“”]+/g)) {
+                const term = (match[1] || match[0]).trim();
+                if (term) terms.push(term);
+            }
+            return terms;
+        }
+        
+        function escapeRegExp(text) {
+            return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+        
+        // A term matches at the start of a word: "art" finds "article" but not "party",
+        // "child" finds "children". Spaces in a phrase match any whitespace, and
+        // ' matches both the straight and the typographic apostrophe.
+        function termPattern(term) {
+            return '(?<![\\p{L}\\p{N}])' + escapeRegExp(term)
+                .replace(/\s+/g, '\\s+')
+                .replace(/['’]/g, "['’]");
+        }
+        
         function search() {
-            const query = document.getElementById('searchInput').value.trim().toLowerCase();
+            const query = document.getElementById('searchInput').value.trim();
             const committee = document.getElementById('committeeFilter').value;
             const year = document.getElementById('yearFilter').value;
+            const container = document.getElementById('searchResults');
             
-            if (!query) {
-                document.getElementById('searchResults').innerHTML = '<div class="no-results">Enter a search term to find paragraphs</div>';
+            if (!dataLoaded) {
+                container.innerHTML = '<div class="loading">Data is still loading</div>';
                 return;
             }
             
-            let results = paragraphs.filter(p => {
-                const matchesQuery = p.text.toLowerCase().includes(query);
-                const matchesCommittee = !committee || p.committee === committee;
-                const matchesYear = !year || p.adoption_year == year;
-                return matchesQuery && matchesCommittee && matchesYear;
+            const terms = parseQuery(query);
+            if (terms.length === 0) {
+                container.innerHTML = '<div class="no-results">Enter a search term to find paragraphs</div>';
+                return;
+            }
+            
+            const termRegexes = terms.map(t => new RegExp(termPattern(t), 'giu'));
+            
+            // How many times each term occurs in each paragraph
+            const counts = paragraphs.map(p => termRegexes.map(re => (p.text.match(re) || []).length));
+            
+            // Rare terms count more than common ones ("interests" matters more than "the")
+            const weights = termRegexes.map((_, t) => {
+                const paragraphsWithTerm = counts.filter(c => c[t] > 0).length;
+                return Math.log(paragraphs.length / (1 + paragraphsWithTerm));
             });
             
-            renderSearchResults(results, query);
+            // Bonus when all terms appear next to each other, in the order typed ("right to life")
+            const phraseRegex = terms.length > 1 ? new RegExp(termPattern(terms.join(' ')), 'giu') : null;
+            const phraseWeight = weights.reduce((sum, w) => sum + w, 0);
+            
+            // A paragraph must contain every term (AND). Its score is the weighted number of
+            // occurrences, divided by the square root of its length so long paragraphs don't always win.
+            const scored = [];
+            paragraphs.forEach((p, i) => {
+                if (committee && p.committee !== committee) return;
+                if (year && p.adoption_year != year) return;
+                if (!counts[i].every(c => c > 0)) return;
+                const phraseCount = phraseRegex ? (p.text.match(phraseRegex) || []).length : 0;
+                const termScore = counts[i].reduce((sum, c, t) => sum + c * weights[t], 0);
+                const score = (termScore + phraseCount * phraseWeight * 2) / Math.sqrt(p.text_length_words || 1);
+                scored.push({ p, score });
+            });
+            
+            // Best match first; equal scores: newer document first
+            scored.sort((a, b) => b.score - a.score || b.p.adoption_year - a.p.adoption_year);
+            
+            currentResults = scored.map(s => s.p);
+            currentHighlight = new RegExp(terms.map(termPattern).join('|'), 'giu');
+            shownCount = PAGE_SIZE;
+            renderSearchResults();
         }
         
-        function renderSearchResults(results, query) {
+        function showMore() {
+            shownCount += PAGE_SIZE;
+            renderSearchResults();
+        }
+        
+        function renderSearchResults() {
             const container = document.getElementById('searchResults');
             
-            if (results.length === 0) {
+            if (currentResults.length === 0) {
                 container.innerHTML = '<div class="no-results">No results found</div>';
                 return;
             }
             
-            const queryWords = query.split(/\s+/).filter(w => w.length > 0);
+            const total = currentResults.length;
+            const remaining = total - shownCount;
             
-            container.innerHTML = results.map(p => {
-                // Highlight matching words
-                let text = p.text;
-                queryWords.forEach(word => {
-                    const regex = new RegExp(`(${word})`, 'gi');
-                    text = text.replace(regex, '<span class="highlight">$1</span>');
-                });
-                
-                return `
-                    <div class="result-card">
-                        <div class="result-header">
-                            <div class="result-title">${p.document_title}</div>
-                            <div class="result-symbol">${p.ohchr_symbol}</div>
-                        </div>
-                        <div class="result-meta">
-                            <span>${p.committee}</span>
-                            <span>${p.adoption_date}</span>
-                            <span>Para. ${p.paragraph_number}</span>
-                        </div>
-                        <div class="result-text">${text}</div>
-                        <div class="result-actions">
-                            <button class="action-btn" onclick="viewDocument('${p.document_id}')">View Document</button>
-                            <button class="action-btn" onclick="addNote('${p.paragraph_id}', '${escapeHtml(p.text.substring(0, 100))}')">Add Note</button>
-                            <button class="action-btn" onclick="addBookmark('${p.paragraph_id}', '${escapeHtml(p.text.substring(0, 100))}')">Bookmark</button>
-                        </div>
+            container.innerHTML = `
+                <div class="results-count">${total} ${total === 1 ? 'paragraph' : 'paragraphs'} found</div>
+                ${currentResults.slice(0, shownCount).map(renderResultCard).join('')}
+                ${remaining > 0 ? `<button class="action-btn show-more" data-action="more">Show more (${remaining} remaining)</button>` : ''}
+            `;
+        }
+        
+        function renderResultCard(p) {
+            return `
+                <div class="result-card">
+                    <div class="result-header">
+                        <div class="result-title">${escapeHtml(p.document_title)}</div>
+                        <div class="result-symbol">${escapeHtml(p.signature)}</div>
                     </div>
-                `;
-            }).join('');
+                    <div class="result-meta">
+                        <span>${escapeHtml(p.committee)}</span>
+                        <span>${escapeHtml(p.adoption_date)}</span>
+                        <span>${paragraphLabel(p)}</span>
+                        ${statusBadge(p.status)}
+                    </div>
+                    <div class="result-text">${highlight(p.text, currentHighlight)}</div>
+                    <div class="result-actions">
+                        <button class="action-btn" data-action="view" data-doc="${escapeHtml(p.document_id)}" data-pid="${escapeHtml(p.paragraph_id)}">View Document</button>
+                        <button class="action-btn" data-action="note" data-pid="${escapeHtml(p.paragraph_id)}">Add Note</button>
+                        ${bookmarkButton(p.paragraph_id)}
+                        <a class="action-btn" href="${escapeHtml(p.source_url)}" target="_blank" rel="noopener">Source ↗</a>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Wrap every match in a highlight span. The text is escaped piece by piece,
+        // so the query can never match (and break) the inserted HTML tags.
+        function highlight(text, regex) {
+            let html = '';
+            let last = 0;
+            for (const match of text.matchAll(regex)) {
+                html += escapeHtml(text.slice(last, match.index));
+                html += `<span class="highlight">${escapeHtml(match[0])}</span>`;
+                last = match.index + match[0].length;
+            }
+            return html + escapeHtml(text.slice(last));
         }
         
         // Documents functionality
@@ -630,53 +796,82 @@
             const container = document.getElementById('documentsGrid');
             container.innerHTML = documents.map(d => `
                 <div class="document-card">
-                    <div class="document-title">${d.document_title}</div>
+                    <div class="document-title">${escapeHtml(d.document_title)}</div>
                     <div class="document-meta">
-                        <span class="document-symbol">${d.ohchr_symbol}</span>
-                        <span>${d.committee}</span>
-                        <span>${d.adoption_year}</span>
+                        <span class="document-symbol">${escapeHtml(d.signature)}</span>
+                        <span>${escapeHtml(d.committee)}</span>
+                        <span>${escapeHtml(d.adoption_year)}</span>
+                        ${statusBadge(d.status)}
                     </div>
                     <div class="document-stats">
                         <span>${d.paragraph_count} paragraphs</span>
                     </div>
                     <div class="document-actions">
-                        <button class="view-btn" onclick="viewDocument('${d.document_id}')">View Document</button>
+                        <button class="view-btn" data-action="view" data-doc="${escapeHtml(d.document_id)}">View Document</button>
                     </div>
                 </div>
             `).join('');
         }
         
-        // View document
-        function viewDocument(documentId) {
+        // View document; with a paragraphId, scroll to that paragraph and mark it
+        function viewDocument(documentId, paragraphId) {
             const doc = documents.find(d => d.document_id === documentId);
             if (!doc) return;
             
             const docParagraphs = paragraphs.filter(p => p.document_id === documentId);
+            const warning = doc.status === 'superseded'
+                ? '<div class="status-warning">This document has been <strong>superseded</strong> by a later General Comment. Check the current one before citing it.</div>'
+                : '';
+            const sourceLink = `<p style="margin-bottom: 16px;"><a href="${escapeHtml(doc.source_url)}" target="_blank" rel="noopener">Official UN document ↗</a></p>`;
             const content = docParagraphs.map(p => `
-                <div style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #e2e8f0;">
-                    <div style="font-weight: 600; margin-bottom: 4px;">Para. ${p.paragraph_number}</div>
-                    <div>${p.text}</div>
+                <div id="para-${escapeHtml(p.paragraph_id)}" style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #e2e8f0;">
+                    <div style="font-weight: 600; margin-bottom: 4px;">${paragraphLabel(p)}</div>
+                    <div>${escapeHtml(p.text)}</div>
                 </div>
             `).join('');
             
-            document.getElementById('modalTitle').textContent = `${doc.document_title} (${doc.ohchr_symbol})`;
-            document.getElementById('modalBody').innerHTML = content;
+            document.getElementById('modalTitle').textContent = `${doc.document_title} (${doc.signature})`;
+            document.getElementById('modalBody').innerHTML = warning + sourceLink + content;
             document.getElementById('documentModal').classList.add('active');
+            document.querySelector('.modal-content').scrollTop = 0;
+            
+            const focused = paragraphId && document.getElementById(`para-${paragraphId}`);
+            if (focused) {
+                focused.classList.add('para-focus');
+                focused.scrollIntoView({ block: 'center' });
+            }
         }
         
         function closeModal() {
             document.getElementById('documentModal').classList.remove('active');
         }
         
+        // Citation helpers
+        function paragraphLabel(p) {
+            return p.is_preamble ? 'Preamble' : `Para. ${p.paragraph_number}`;
+        }
+        
+        // e.g. "CRC, General comment No. 14 (2013) on ..., CRC/C/GC/14, para. 2"
+        function citation(p) {
+            const committees = p.committees && p.committees.length ? p.committees.join('/') : p.committee;
+            const year = p.document_title.includes(`(${p.adoption_year})`) ? '' : ` (${p.adoption_year})`;
+            return `${committees}, ${p.document_title}${year}, ${p.signature}, ${paragraphLabel(p).toLowerCase()}`;
+        }
+        
+        function statusBadge(status) {
+            return status === 'superseded'
+                ? '<span class="status-badge" title="Replaced by a later General Comment. Check the current one before citing.">Superseded</span>'
+                : '';
+        }
+        
         // Workspace functionality
-        function addNote(paragraphId, text) {
+        function addNote(paragraphId) {
             const note = prompt('Enter your note:', '');
             if (note) {
                 const noteObj = {
                     id: Date.now(),
                     paragraphId,
                     text: note,
-                    originalText: text,
                     createdAt: new Date().toISOString()
                 };
                 notes.push(noteObj);
@@ -685,37 +880,116 @@
             }
         }
         
-        function addBookmark(paragraphId, text) {
-            const bookmarkObj = {
-                id: Date.now(),
-                paragraphId,
-                text: text,
-                createdAt: new Date().toISOString()
-            };
-            bookmarks.push(bookmarkObj);
+        function editNote(id) {
+            const note = notes.find(n => n.id === id);
+            if (!note) return;
+            const text = prompt('Edit your note:', note.text);
+            if (text === null || !text.trim()) return;
+            note.text = text;
             saveWorkspace();
             renderWorkspace();
+        }
+        
+        function deleteNote(id) {
+            if (!confirm('Delete this note?')) return;
+            notes = notes.filter(n => n.id !== id);
+            saveWorkspace();
+            renderWorkspace();
+        }
+        
+        // Add the bookmark, or remove it if the paragraph is already bookmarked
+        function toggleBookmark(paragraphId) {
+            if (isBookmarked(paragraphId)) {
+                bookmarks = bookmarks.filter(b => b.paragraphId !== paragraphId);
+            } else {
+                bookmarks.push({
+                    id: Date.now(),
+                    paragraphId,
+                    createdAt: new Date().toISOString()
+                });
+            }
+            saveWorkspace();
+            renderWorkspace();
+            
+            // Update the bookmark buttons already on the page
+            document.querySelectorAll('[data-action="bookmark"]').forEach(btn => {
+                if (btn.dataset.pid === paragraphId) btn.outerHTML = bookmarkButton(paragraphId);
+            });
+        }
+        
+        function isBookmarked(paragraphId) {
+            return bookmarks.some(b => b.paragraphId === paragraphId);
+        }
+        
+        function bookmarkButton(paragraphId) {
+            const saved = isBookmarked(paragraphId);
+            return `<button class="action-btn${saved ? ' is-active' : ''}" data-action="bookmark" data-pid="${escapeHtml(paragraphId)}">${saved ? 'Bookmarked ✓' : 'Bookmark'}</button>`;
+        }
+        
+        // Citation, date and excerpt of the paragraph a note or bookmark points to
+        function workspaceSource(item) {
+            const p = paragraphById.get(item.paragraphId);
+            const date = new Date(item.createdAt).toLocaleDateString();
+            if (!p) {
+                return `<div class="note-header"><span>Paragraph ${escapeHtml(item.paragraphId)} is no longer in the dataset</span><span>${date}</span></div>`;
+            }
+            const excerpt = p.text.length > 200 ? p.text.substring(0, 200) + '…' : p.text;
+            return `
+                <div class="note-header"><span class="citation">${escapeHtml(citation(p))}</span><span>${date}</span></div>
+                ${p.status === 'superseded' ? `<div class="excerpt">${statusBadge(p.status)}</div>` : ''}
+                <div class="excerpt">${escapeHtml(excerpt)}</div>
+            `;
+        }
+        
+        function viewButton(paragraphId) {
+            const p = paragraphById.get(paragraphId);
+            return p ? `<button class="action-btn" data-action="view" data-doc="${escapeHtml(p.document_id)}" data-pid="${escapeHtml(p.paragraph_id)}">View in Document</button>` : '';
         }
         
         function renderWorkspace() {
             document.getElementById('notesList').innerHTML = notes.length > 0 ? notes.map(n => `
                 <div class="note-card">
-                    <div class="note-header">
-                        <span>${n.originalText.substring(0, 80)}...</span>
-                        <span>${new Date(n.createdAt).toLocaleDateString()}</span>
+                    ${workspaceSource(n)}
+                    <div class="note-text">${escapeHtml(n.text)}</div>
+                    <div class="result-actions">
+                        ${viewButton(n.paragraphId)}
+                        <button class="action-btn" data-action="edit-note" data-id="${n.id}">Edit</button>
+                        <button class="action-btn" data-action="delete-note" data-id="${n.id}">Delete</button>
                     </div>
-                    <div class="note-text">${n.text}</div>
                 </div>
             `).join('') : '<div class="empty-state"><p>No notes yet. Add notes from search results.</p></div>';
             
             document.getElementById('bookmarksList').innerHTML = bookmarks.length > 0 ? bookmarks.map(b => `
                 <div class="bookmark-card">
-                    <div class="bookmark-header">
-                        <span>${b.text.substring(0, 80)}...</span>
-                        <span>${new Date(b.createdAt).toLocaleDateString()}</span>
+                    ${workspaceSource(b)}
+                    <div class="result-actions">
+                        ${viewButton(b.paragraphId)}
+                        <button class="action-btn" data-action="remove-bookmark" data-pid="${escapeHtml(b.paragraphId)}">Remove</button>
                     </div>
                 </div>
             `).join('') : '<div class="empty-state"><p>No bookmarks yet. Add bookmarks from search results.</p></div>';
+        }
+        
+        // Download notes and bookmarks as a Markdown file, each with a full citation
+        function exportWorkspace() {
+            const entry = paragraphId => {
+                const p = paragraphById.get(paragraphId);
+                if (!p) return [`### Paragraph ${paragraphId} (no longer in the dataset)`, ''];
+                const warning = p.status === 'superseded' ? ['**Superseded:** replaced by a later General Comment. Check the current one before citing.', ''] : [];
+                return [`### ${citation(p)}`, '', ...warning, `> ${p.text.replace(/\n/g, '\n> ')}`, '', `Source: ${p.source_url}`, ''];
+            };
+            
+            const lines = ['# My UNHRDB workspace', '', `Exported ${new Date().toLocaleDateString()}`, '', '## Notes', ''];
+            notes.forEach(n => lines.push(...entry(n.paragraphId), `**Note:** ${n.text}`, ''));
+            lines.push('## Bookmarks', '');
+            bookmarks.forEach(b => lines.push(...entry(b.paragraphId)));
+            
+            const url = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/markdown' }));
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'unhrdb-workspace.md';
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
         }
         
         function saveWorkspace() {
@@ -731,10 +1005,11 @@
         }
         
         // Utility functions
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
+        
+        // Escape text before putting it into HTML (also inside attribute values)
+        function escapeHtml(value) {
+            const entities = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+            return String(value ?? '').replace(/[&<>"']/g, c => entities[c]);
         }
         
         // Tab switching
@@ -754,11 +1029,27 @@
             if (e.key === 'Enter') search();
         });
         
+        // Buttons in results, documents and the workspace carry a data-action attribute
+        // (plus data-pid / data-doc / data-id). One listener handles all of them, so no
+        // paragraph text ever has to be put inside JavaScript code.
+        document.addEventListener('click', (e) => {
+            const button = e.target.closest('[data-action]');
+            if (!button) return;
+            const { action, pid, doc, id } = button.dataset;
+            
+            if (action === 'view') viewDocument(doc, pid);
+            else if (action === 'note') addNote(pid);
+            else if (action === 'bookmark' || action === 'remove-bookmark') toggleBookmark(pid);
+            else if (action === 'edit-note') editNote(Number(id));
+            else if (action === 'delete-note') deleteNote(Number(id));
+            else if (action === 'more') showMore();
+            else if (action === 'export') exportWorkspace();
+        });
+        
         // Initialize
         window.addEventListener('DOMContentLoaded', () => {
             loadWorkspace();
             loadData();
-            renderWorkspace();
         });
     </script>
 </body>
